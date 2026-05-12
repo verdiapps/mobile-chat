@@ -1,5 +1,4 @@
 class Api::V1::Accounts::Conversations::MessagesController < Api::V1::Accounts::Conversations::BaseController
-  before_action :ensure_api_inbox, only: :update
 
   def index
     @messages = message_finder.perform
@@ -14,8 +13,51 @@ class Api::V1::Accounts::Conversations::MessagesController < Api::V1::Accounts::
   end
 
   def update
-    Messages::StatusUpdateService.new(message, permitted_params[:status], permitted_params[:external_error]).perform
+    updated_attributes = {}
+    
+    if permitted_params[:content].present? && message.sender == Current.user
+      updated_attributes[:content] = permitted_params[:content]
+    end
+
+    if permitted_params[:content_attributes].present?
+      updated_attributes[:content_attributes] = message.content_attributes.merge(permitted_params[:content_attributes].to_h)
+    end
+
+    message.update!(updated_attributes) if updated_attributes.present?
+
+    if permitted_params[:status].present? && @conversation.inbox.api?
+      Messages::StatusUpdateService.new(message, permitted_params[:status], permitted_params[:external_error]).perform
+    end
+
     @message = message
+
+    tokens = (@message.conversation.inbox.members.pluck(:pubsub_token) + [@message.conversation.contact_inbox.pubsub_token]).compact.uniq
+    if tokens.present?
+      Rails.logger.info "[Chatwoot:Broadcast] Sending message_updated (manager update) to tokens and account_#{@message.account_id}"
+      ::ActionCableBroadcastJob.perform_now(tokens, 'message_updated', @message.push_event_data.merge(account_id: @message.account_id))
+      ActionCable.server.broadcast("account_#{@message.account_id}", { event: 'message_updated', data: @message.push_event_data.merge(account_id: @message.account_id) })
+    end
+  end
+
+  def read
+    message_ids = Array(params[:message_ids].presence || (params[:id].present? ? [params[:id]] : [])).map(&:to_i)
+    Rails.logger.info "[Chatwoot:Read] Conv: #{@conversation.display_id} (ID: #{@conversation.id}), Message IDs: #{message_ids}"
+    
+    messages = @conversation.messages.where(id: message_ids).where.not(status: 'read')
+    Rails.logger.info "[Chatwoot:Read] Found #{messages.count} messages to update"
+
+    messages.each do |msg|
+      Messages::StatusUpdateService.new(msg, 'read').perform
+      
+      tokens = (msg.conversation.inbox.members.pluck(:pubsub_token) + [msg.conversation.contact_inbox.pubsub_token]).compact.uniq
+      if tokens.present?
+        Rails.logger.info "[Chatwoot:Broadcast] Sending to tokens and account_#{msg.account_id}"
+        ::ActionCableBroadcastJob.perform_now(tokens, 'message_updated', msg.push_event_data.merge(account_id: msg.account_id))
+        ActionCable.server.broadcast("account_#{msg.account_id}", { event: 'message_updated', data: msg.push_event_data.merge(account_id: msg.account_id) })
+      end
+    end
+    @messages = @conversation.messages.where(id: message_ids)
+    render json: @messages
   end
 
   def destroy
@@ -65,16 +107,10 @@ class Api::V1::Accounts::Conversations::MessagesController < Api::V1::Accounts::
   end
 
   def permitted_params
-    params.permit(:id, :target_language, :status, :external_error)
+    params.permit(:id, :target_language, :status, :external_error, :content, content_attributes: {})
   end
 
   def already_translated_content_available?
     message.translations.present? && message.translations[permitted_params[:target_language]].present?
-  end
-
-  # API inbox check
-  def ensure_api_inbox
-    # Only API inboxes can update messages
-    render json: { error: 'Message status update is only allowed for API inboxes' }, status: :forbidden unless @conversation.inbox.api?
   end
 end

@@ -141,6 +141,9 @@ Rails.application.routes.draw do
                   post :translate
                   post :retry
                 end
+                collection do
+                  post :read
+                end
               end
               resources :assignments, only: [:create]
               resources :labels, only: [:create, :index]
@@ -439,7 +442,11 @@ Rails.application.routes.draw do
         resource :config, only: [:create]
         resources :campaigns, only: [:index]
         resources :events, only: [:create]
-        resources :messages, only: [:index, :create, :update]
+        resources :messages, only: [:index, :create, :update, :destroy] do
+          collection do
+            post :read
+          end
+        end
         resources :conversations, only: [:index, :create] do
           collection do
             post :destroy_custom_attributes
@@ -571,7 +578,11 @@ Rails.application.routes.draw do
                   post :update_last_seen
                 end
 
-                resources :messages, only: [:index, :create, :update]
+                resources :messages, only: [:index, :create, :update, :destroy] do
+                  collection do
+                    post :read
+                  end
+                end
               end
             end
           end

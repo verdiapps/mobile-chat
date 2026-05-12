@@ -1,6 +1,6 @@
 class Api::V1::Widget::MessagesController < Api::V1::Widget::BaseController
   before_action :set_conversation, only: [:create]
-  before_action :set_message, only: [:update]
+  before_action :set_message, only: [:update, :destroy]
 
   def index
     @messages = conversation.nil? ? [] : message_finder.perform
@@ -21,10 +21,48 @@ class Api::V1::Widget::MessagesController < Api::V1::Widget::BaseController
         retain_original_contact_name: true
       ).perform
     else
-      @message.update!(message_update_params[:message])
+      updated_attributes = {}
+      
+      if message_update_params[:message].present?
+        if message_update_params[:message][:content].present? && @message.sender == @contact
+          updated_attributes[:content] = message_update_params[:message][:content]
+        end
+
+        if message_update_params[:message][:content_attributes].present?
+          updated_attributes[:content_attributes] = @message.content_attributes.merge(message_update_params[:message][:content_attributes].to_h)
+        end
+
+        if message_update_params[:message][:submitted_values].present?
+          updated_attributes[:submitted_values] = message_update_params[:message][:submitted_values]
+        end
+      end
+
+      @message.update!(updated_attributes) if updated_attributes.present?
     end
   rescue StandardError => e
     render json: { error: @contact.errors, message: e.message }.to_json, status: :internal_server_error
+  end
+
+  def destroy
+    if @message.sender == @contact
+      ActiveRecord::Base.transaction do
+        @message.update!(content: I18n.t('conversations.messages.deleted'), content_type: :text, content_attributes: { deleted: true })
+        @message.attachments.destroy_all
+      end
+      head :ok
+    else
+      render json: { error: 'Unauthorized' }, status: :unauthorized
+    end
+  end
+
+  def read
+    message_ids = params[:message_ids].presence || (params[:id].present? ? [params[:id]] : [])
+    messages = @web_widget.inbox.messages.where(id: message_ids).where.not(status: 'read')
+
+    messages.each do |msg|
+      Messages::StatusUpdateService.new(msg, 'read').perform
+    end
+    head :ok
   end
 
   private
@@ -67,7 +105,7 @@ class Api::V1::Widget::MessagesController < Api::V1::Widget::BaseController
   end
 
   def message_update_params
-    params.permit(message: [{ submitted_values: [:name, :title, :value, { csat_survey_response: [:feedback_message, :rating] }] }])
+    params.permit(message: [:content, { content_attributes: {} }, { submitted_values: [:name, :title, :value, { csat_survey_response: [:feedback_message, :rating] }] }])
   end
 
   def permitted_params
