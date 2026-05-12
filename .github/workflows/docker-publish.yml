@@ -1,0 +1,51 @@
+name: Docker Publish
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      tag_suffix:
+        description: "Tag suffix (optional)"
+        required: false
+        default: ""
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Docker tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ -n "${{ inputs.tag_suffix }}" ]; then
+              echo "tag=${{ vars.DOCKER_NAME }}:${{ inputs.tag_suffix }}-${GITHUB_SHA:0:7}" >> $GITHUB_OUTPUT
+            else
+              echo "tag=${{ vars.DOCKER_NAME }}:${GITHUB_SHA:0:7}" >> $GITHUB_OUTPUT
+            fi
+          else
+            # Для автоматического запуска из master используем полный SHA
+            echo "tag=${{ vars.DOCKER_NAME }}:${{ github.sha }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.tag.outputs.tag }}
+
+      - name: Output image tag
+        run: 'echo "Built and pushed image: ${{ steps.tag.outputs.tag }}"'
