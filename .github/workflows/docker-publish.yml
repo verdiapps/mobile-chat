@@ -40,12 +40,19 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
+      - name: Strip enterprise code
+        run: |
+          rm -rf enterprise
+          rm -rf spec/enterprise
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: docker/Dockerfile
           push: true
           tags: ${{ steps.tag.outputs.tag }}
 
       - name: Output image tag
         run: 'echo "Built and pushed image: ${{ steps.tag.outputs.tag }}"'
+
