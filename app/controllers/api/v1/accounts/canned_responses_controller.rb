@@ -2,18 +2,18 @@ class Api::V1::Accounts::CannedResponsesController < Api::V1::Accounts::BaseCont
   before_action :fetch_canned_response, only: [:update, :destroy]
 
   def index
-    render json: canned_responses
+    @canned_responses = canned_responses
   end
 
   def create
     @canned_response = Current.account.canned_responses.new(canned_response_params)
     @canned_response.save!
-    render json: @canned_response
+    attach_files if params[:files].present?
   end
 
   def update
     @canned_response.update!(canned_response_params)
-    render json: @canned_response
+    attach_files if params[:files].present?
   end
 
   def destroy
@@ -28,7 +28,13 @@ class Api::V1::Accounts::CannedResponsesController < Api::V1::Accounts::BaseCont
   end
 
   def canned_response_params
-    params.require(:canned_response).permit(:short_code, :content)
+    params.require(:canned_response).permit(:short_code, :content, content_attributes: {})
+  end
+
+  def attach_files
+    params[:files].each do |file|
+      @canned_response.files.attach(file)
+    end
   end
 
   def canned_responses
