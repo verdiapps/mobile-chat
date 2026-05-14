@@ -149,7 +149,8 @@ class User < ApplicationRecord
       avatar_url: avatar_url,
       type: 'user',
       availability_status: availability_status,
-      thumbnail: avatar_url
+      thumbnail: avatar_url,
+      external_id: external_id
     }
   end
 
@@ -158,7 +159,8 @@ class User < ApplicationRecord
       id: id,
       name: name,
       email: email,
-      type: 'user'
+      type: 'user',
+      external_id: external_id
     }
   end
 

@@ -15,6 +15,7 @@ class Api::V1::Accounts::AgentsController < Api::V1::Accounts::BaseController
       role: new_agent_params['role'],
       availability: new_agent_params['availability'],
       auto_offline: new_agent_params['auto_offline'],
+      external_id: new_agent_params['external_id'],
       inviter: current_user,
       account: Current.account
     )
@@ -23,7 +24,7 @@ class Api::V1::Accounts::AgentsController < Api::V1::Accounts::BaseController
   end
 
   def update
-    @agent.update!(agent_params.slice(:name).compact)
+    @agent.update!(agent_params.slice(:name, :external_id).compact)
     @agent.current_account_user.update!(agent_params.slice(*account_user_attributes).compact)
   end
 
@@ -72,7 +73,7 @@ class Api::V1::Accounts::AgentsController < Api::V1::Accounts::BaseController
   end
 
   def allowed_agent_params
-    [:name, :email, :role, :availability, :auto_offline]
+    [:name, :email, :role, :availability, :auto_offline, :external_id]
   end
 
   def agent_params
@@ -80,7 +81,7 @@ class Api::V1::Accounts::AgentsController < Api::V1::Accounts::BaseController
   end
 
   def new_agent_params
-    params.require(:agent).permit(:email, :name, :role, :availability, :auto_offline)
+    params.require(:agent).permit(:email, :name, :role, :availability, :auto_offline, :external_id)
   end
 
   def agents
