@@ -8,6 +8,7 @@
 #  created_at :datetime         not null
 #  updated_at :datetime         not null
 #  account_id :integer          not null
+#  user_id    :integer
 #
 
 class CannedResponse < ApplicationRecord
@@ -19,7 +20,10 @@ class CannedResponse < ApplicationRecord
   include Rails.application.routes.url_helpers
 
   belongs_to :account
+  belongs_to :user, optional: true
   has_many_attached :files
+
+  scope :by_user, ->(user_id) { where(user_id: user_id) if user_id.present? }
 
   def file_base_data
     files.map do |file|
